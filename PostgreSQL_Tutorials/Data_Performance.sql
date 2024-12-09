@@ -34,6 +34,7 @@ rồi sau đó mất công look-up sang table chính
 */
 
 -- a. B-Tree Index (Balanced Tree Index) (Default)
+--     B-Tree index uses the **Binary Tree** data structure for storage, and Binary Search Tree (BST) is employed to perform searches.
 --     Best for equality and range queries.
 --     Suitable for =, <, >, <=, >=, and BETWEEN.
 --     Efficient for large tables with high cardinality.
@@ -42,11 +43,32 @@ CREATE INDEX index_name ON table_name (column_name);
 ---- Example 1: Create an index on the "date" column of the "orders" table
 CREATE INDEX idx_orders_date ON orders (date);
 
+--- Bitmap Index
+/*
+Bản chất của bitmap index vẫn sử dụng cấu trúc B-Tree, tuy nhiên nó lưu trữ thông tin khác với B-Tree index. 
+B-Tree index mapping index với một hoặc nhiều rowId. 
+Bitmap index mapping index với giá trị bit tương ứng của column. 
+Ví dụ có 3 giá trị của gender: Male, Female, Unknown. Tạo ra 3 bit tương ứng 0, 1, 2 cho 3 giá trị đó và mapping với column trong table chính.
+
+Tính chất:
+    - Phù hợp với các column low cardinality.
+    - Lưu bit cho mỗi giá trị nên giảm dung lượng lưu trữ cần dùng.
+    - Chỉ hiệu quả với tìm kiếm full match value.
+    - Kết hợp với nhiều index khác để tăng tốc độ với OR, AND.
+Hạn chế:
+    - Nếu thêm hoặc bớt một giá trị cần build lại toàn bộ index table. Với B-Tree index chỉ cần re-balance tree.
+    - Với PostgreSQL, bitmap index được lưu trên memory vì size của nó khá nhỏ, từ đó tăng tốc độ truy vấn. 
+        Vì vậy khi restart nó cần build lại toàn bộ bitmap index. 
+        Để tránh nhược điểm này, trong thực tế sẽ sử dụng kết hợp với column khác tạo thành composite index.
+*/
+
+
 -- b. Hash Index
 --     Optimized for equality comparisons (=). (Faster than B-Tree)
 --     Not as versatile as B-Tree.
 --     Suitable for columns with a small number of distinct values.
 --     Not suitable for columns with high cardinality or sequential data.
+--     Can't create composite index with hash index
 CREATE INDEX index_name ON table_name USING hash (column_name);
 ---- Example 2: Create a unique index on the "id" column of the "customers" table
 CREATE INDEX idx_user_id_hash ON users USING hash (user_id);
@@ -517,3 +539,4 @@ CREATE MATERIALIZED VIEW ENGINEER_MVIEW AS
 
 REFRESH MATERIALIZED VIEW ENGINEER_MVIEW;
 
+-- JOIN
