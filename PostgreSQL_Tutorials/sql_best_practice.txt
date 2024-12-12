@@ -1,0 +1,23 @@
+1. NOT IN
+Use NOT EXISTS instead of NOT IN 
+Ex: SELECT * FROM country WHERE id NOT IN (SELECT country_id FROM engineer);
+
+If (SELECT country_id FROM engineer) contains NULL value --> Result: 0 record
+NOT IN (SELECT ...) is not optimal for query execution plans
+
+2. BETWEEN
+Use >, '>=', <, <= instead of BETWEEN with datetime column. (Can use BETWEEN with date column)
+
+3. Timestampz / Timestamp 
+Use Timestampz instead of Timestamp
+Với timestamp with time zone, internally nó được lưu trữ dưới dạng UTC tính từ thời điểm Jun 01, 2000 cộng thêm time zone. 
+Có nghĩa là nó lưu trữ chính xác thời điểm trên tất cả các khu vực địa lý có múi giờ khác nhau.
+Thông tin về datetime tự động được correct về đúng múi giờ trên máy tính khi query.
+
+4. Char / Varchar
+Do not use char(n). Mọi string khi lữu trữ với char(n) sẽ được thêm space cho đủ độ dài
+Ex: Nếu sử dụng char(14) để lưu trữ string "hello world", nó sẽ chuyển thành "hello world   ".
+
+Use varchar / text instead of char(n) 
+varchar / text không tự động thêm space cho đủ số lượng.
+Không có sự khác biệt về performance giữa varchar và text 

@@ -39,7 +39,7 @@ rồi sau đó mất công look-up sang table chính
 --     Suitable for =, <, >, <=, >=, and BETWEEN.
 --     Efficient for large tables with high cardinality.
 --     Efficient for columns with sequential or increasing data (e.g., ID, date).
-CREATE INDEX index_name ON table_name (column_name);
+CREATE INDEX index_name ON table_name USING BTREE(column_name);
 ---- Example 1: Create an index on the "date" column of the "orders" table
 CREATE INDEX idx_orders_date ON orders (date);
 
@@ -68,10 +68,22 @@ Hạn chế:
 --     Not as versatile as B-Tree.
 --     Suitable for columns with a small number of distinct values.
 --     Not suitable for columns with high cardinality or sequential data.
---     Can't create composite index with hash index
+--     Can't create 'composite index' with hash index
 CREATE INDEX index_name ON table_name USING hash (column_name);
 ---- Example 2: Create a unique index on the "id" column of the "customers" table
 CREATE INDEX idx_user_id_hash ON users USING hash (user_id);
+
+/*
+** Note:
+Số lượng buckets (xô) trong bảng băm và số lượng rows (dòng) không nhất thiết phải bằng nhau 
+vì buckets không được tạo dựa trên số dòng mà dựa trên một số tiêu chí tối ưu hóa bộ nhớ và tốc độ truy vấn
+1. Bucket là gì?
+    Một bucket là một "xô" dùng để lưu trữ các dòng dữ liệu sau khi hashing value.
+    Mỗi giá trị trong bảng hash sẽ được gán vào một bucket cụ thể dựa trên hash function.
+    PostgreSQL thường tạo số lượng buckets theo bội số của 2, tối thiểu là 1024 hoặc lớn hơn nếu cần.
+    Số lượng buckets lớn hơn giúp phân phối các dòng đều hơn, giảm xung đột, giúp việc kiểm tra từng bucket nhanh hơn
+*/
+
 
 -- c. GIN (Generalized Inverted Index)
 --     Used for data types with multiple values, such as:
@@ -126,6 +138,15 @@ CREATE UNIQUE INDEX idx_customers_email ON customers (email);
 CREATE INDEX index_name ON table_name (column_name1, column_name2) INCLUDE (column_name3, column_name4);
 ---- Example 9: Create a covering index on the "name" and "email" columns of the "customers" table
 CREATE INDEX idx_customers_name_email ON customers (name, email) INCLUDE (phone);
+
+--- Check index available on table:
+SELECT cls.relname, am.amname, idxes.indexdef
+FROM pg_index idx
+JOIN pg_class cls ON cls.oid=idx.indexrelid
+JOIN pg_class tab ON tab.oid=idx.indrelid
+JOIN pg_am am ON am.oid=cls.relam
+JOIN pg_indexes idxes ON cls.relname = idxes.indexname
+WHERE lower(tab.relname) = 'engineer';
 
 /*
 Comparison of Index Types:
@@ -524,6 +545,8 @@ SELECT * FROM orders;
 -- Show the chunks created by TimescaleDB
 SELECT show_chunks('orders');
 
+--------------------------------------------
+
 -- MATERIALIZED VIEW
 /*
 A materialized view in PostgreSQL is a database object that stores the result of a query physically on disk. 
@@ -539,4 +562,159 @@ CREATE MATERIALIZED VIEW ENGINEER_MVIEW AS
 
 REFRESH MATERIALIZED VIEW ENGINEER_MVIEW;
 
+--------------------------------------------
+
 -- JOIN
+
+/*
+Three common join algorithms used in relational databases
+    Nested loop join.
+    Hash join.
+    Merge join.
+*/
+
+--** PostgreSQL always determines the most optimal type of join to use for a query.
+
+-- 1. Nested loop join
+/*
+    - The nested loop join is the simplest join algorithm.
+    - It compares each row from the first table with all rows from the second table.
+    - This approach is simple but can be slow for large datasets.
+*/
+/*
+Steps in a Nested Loop Join:
+    Outer Loop (Driver Relation): The database takes each row from the outer table (or dataset) one at a time.
+    Inner Loop (Probed Relation): For each row in the outer loop, it scans all rows in the inner table to check for matches based on the join condition.
+    Match Check: If the join condition evaluates to true (e.g., matching keys for equality join), the algorithm produces the combined result of the matching rows.
+**Inner Loop stops only when the column contains a unique value. If not, the scan will not stop upon finding a match but will continue to scan the entire join table.
+*/
+
+SELECT * FROM ENGINEER e JOIN COUNTRY c ON e.country_id = c.id;
+
+-- To optimize Nested loop join --> use Index
+
+-- 2. Hash join
+/*
+    - The hash join algorithm is a more efficient join algorithm.
+    - It first builds a hash table from the smaller table (the one that is probed).
+    - Then, it scans the larger table and looks up the matching rows in the hash table.
+    - This approach is more efficient than the nested loop join for large datasets.
+    - It is only suitable for joins with equality (`=`) conditions.
+*/
+/*
+Steps in a Hash Join:
+    Build Hash Table: The database builds a hash table from the smaller table (the one that is probed).
+    Probe Hash Table: The database scans the larger table and looks up the matching rows in the hash table.
+    Match Check: If the join condition evaluates to true (e.g., matching keys for equality join), the algorithm produces the combined result of the matching rows.
+*/
+SELECT * FROM ENGINEER e JOIN COUNTRY c ON e.country_id = c.id;
+
+-- 3. Merge Join (sort-merge join)
+/*
+    - The merge join algorithm is a more efficient join algorithm.
+    - It first sorts both tables based on the join condition.
+    - Then, it scans both tables simultaneously and compares the rows.
+    - This approach is more efficient than the nested loop join for large datasets.
+    - It is only suitable for joins with equality (`=`) conditions.
+*/
+
+/*
+Steps in a Merge Join:
+    Sort Tables: The database sorts both tables based on the join condition.
+    Merge Tables: The database scans both tables simultaneously and compares the rows.
+    Match Check: If the join condition evaluates to true (e.g., matching keys for equality join), the algorithm produces the combined result of the matching rows.
+*/
+SELECT * FROM ENGINEER e JOIN COUNTRY c ON e.country_id = c.id;
+-- *The computation cost and execution time can be quite high, even greater than a nested loop join, due to the need to sort the tables.
+
+--------------------------------------------
+
+-- CONCURRENCY CONTROL (LOCK)
+-- Concurrency control in SQL is crucial for maintaining data consistency and integrity in multi-user environments.
+/* 
+A. Pessimistic Lock (Pessimistic Concurrency Control) - PPC
+When transaction T(1) starts and modifies data, it locks the row, page, or table depending on the query conditions. 
+Subsequent transactions T(x) cannot modify the data in that row and must wait until T(1) is completed.
+    How It Works:
+    - Transaction Start: A transaction begins by acquiring locks on the data it intends to read or modify.
+        Shared Lock: Allows multiple transactions to read the data but prevents writes.
+        Exclusive Lock: Prevents both reads and writes by other transactions.
+    - Transaction Execution: The transaction performs operations while holding locks.
+    - Commit: Locks are released after the transaction commits.
+    - Rollback: Locks are released if the transaction rolls back.
+*/
+
+/*
+B. Optimistic Lock (Optimistic Concurrency Control) - OCC
+Instead of locking rows during the update process, optimistic lock only applies the lock at the time of committing the update.
+    How It Works:
+    - Transaction Start: A transaction begins by reading data.
+    - Transaction Execution: The transaction performs operations locally without locking the database rows.
+    - Conflict Detection: At commit time, the system checks whether the data being modified has changed since it was read. 
+    If the data has been modified by another transaction, the current transaction is rolled back.
+    - Commit: If no conflicts are detected, the transaction is committed.
+*/
+
+/*
+Feature	                Optimistic Concurrency Control          Pessimistic Concurrency Control
+-----------------------------------------------------------------------------------------------
+Conflict Handling	    Detects conflicts at commit time	    Prevents conflicts upfront
+Locks	                No locks during transaction	            Uses locks to control access
+Transaction Rollbacks	May require rollbacks for conflicts	    Rarely requires rollbacks
+Throughput	            Higher in low-contention scenarios	    Lower due to blocking in contention
+Use Case	            Low contention, read-heavy systems	    High contention, write-heavy systems
+
+When to Use Which?
+*Optimistic: Use OCC when most transactions are read-only or updates to the same data are rare. 
+    Examples include analytics, reporting, and distributed systems with eventual consistency.
+*Pessimistic: Use PCC when data integrity is critical, and there is frequent contention for the same data. 
+    Examples include banking systems, ticket booking platforms, and inventory management systems.
+*/
+
+/*
+Shared locks and exclusive locks are two types of locks used in SQL databases to manage concurrent access to data. 
+These locks are part of the concurrency control mechanism, ensuring data consistency and integrity while allowing multiple transactions to run simultaneously.
+*/
+
+-- 1. Shared Lock (read lock)
+/*
+Purpose:
+    Allows read-only access to a resource (e.g., a table or row).
+    Multiple transactions can hold a shared lock on the same resource simultaneously.
+
+Behavior:
+    Shared locks are used for read operations (e.g., SELECT statements with certain isolation levels).
+    Prevents other transactions from modifying the resource while it is being read.
+    Does not block other shared locks but blocks exclusive locks.
+
+Example: Suppose Transaction A holds a shared lock on a row:
+    Transaction A can read the row.
+    Transaction B can also acquire a shared lock and read the row simultaneously.
+    Transaction C cannot acquire an exclusive lock (needed for writing) until both shared locks are released.
+*/
+
+-- 2. Exclusive Lock (X-Lock)
+/*
+Purpose:
+    Allows write access to a resource.
+    Ensures that no other transaction can read or write the resource while the exclusive lock is held.
+
+Behavior:
+    Exclusive locks are used for write operations (e.g., INSERT, UPDATE, or DELETE).
+    Blocks both shared locks and other exclusive locks.
+
+Example: Suppose Transaction A holds an exclusive lock on a row:
+    Transaction A can modify the row.
+    Transaction B cannot acquire a shared or exclusive lock on the same row until Transaction A releases its exclusive lock.
+*/
+
+/*
+                    Lock compatibility
+                Shared lock   Exclusive lock
+Shared lock         YES     |        NO
+----------------------------|---------------
+Exclusive lock       NO      |       NO
+*/
+
+--------------------------------------------
+
