@@ -165,3 +165,4 @@ WHEN NOT MATCHED THEN
         WHEN NOT MATCHED THEN
             INSERT (customer_id, name, email, phone, join_date)
             VALUES (source.customer_id, source.name, source.email, source.phone, source.join_date);
+
