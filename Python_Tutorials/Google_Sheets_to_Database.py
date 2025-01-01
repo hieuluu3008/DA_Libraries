@@ -1,6 +1,6 @@
 ###TOPIC: Read data from Google Sheet and ingest into PostgreSQL database
 
-# import necessary librabries
+# Import necessary librabries
 import pandas as pd
 import time
 import psycopg2
@@ -13,7 +13,7 @@ from google.oauth2.service_account import Credentials
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets"
 ]
-creds = Credentials.from_service_account_file('api-json-path', scopes=scopes) # Replace the api-json-path
+creds = Credentials.from_service_account_file('api_json_path', scopes=scopes) # Replace the api-json-path
 client = gspread.authorize(creds)
 
 # Get data from Google Sheet into df
@@ -83,3 +83,7 @@ except Exception as e:
     print(f"Error: {e}")
 finally:
     time.sleep(3)
+    
+    
+# How to get Google Sheets API: https://www.youtube.com/watch?v=zCEJurLGFRk
+
