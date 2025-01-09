@@ -13,7 +13,7 @@ default_arguments = {
 dag = DAG(
 	dag_id = 'dag_etl', # DAG name on UI
 	default_args = default_arguments,
-	description = 'dag airflow', # description on UI
+	description = 'trigger dag', # description on UI
 	schedule_interval = '05 5 * * *' # thời gian chạy của DAG theo Cron
 )
 

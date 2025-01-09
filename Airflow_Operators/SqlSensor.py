@@ -1,6 +1,6 @@
 from datetime import datetime
 from airflow import DAG
-from airflow.operators.email import EmailOperator
+from airflow.sensors.sql import SqlSensor
 from datetime import timedelta
 
 default_arguments = {
@@ -17,12 +17,14 @@ dag = DAG(
 	schedule_interval = '05 5 * * *' # thời gian chạy của DAG theo Cron
 )
 
-# EmailOperator
-email_task = EmailOperator(
-	task_id = 'email_example', # name in UI
-	to = 'luutrunghieu298@gmail.com', # send email to
-	subject = 'Email DAG Airflow', # subject of email
-	html_content = 'Something went wrong with the dag', # content of email
-	dag=dag,
-	trigger_rule = 'all_done'
+wait_for_dynamic_condition = SqlSensor(
+    task_id="wait_for_sql_condition",
+    conn_id="my_mysql_connection",
+    sql="SELECT COUNT(*) FROM my_table WHERE date = %(target_date)s;",
+    parameters={"target_date": "2024-08-30"},  # Pass parameters to the query
+    poke_interval=15,  # Check every 15 seconds
+    timeout=300,  # Timeout after 5 minutes
+    mode="reschedule",  # Reschedule mode for long waits
 )
+
+

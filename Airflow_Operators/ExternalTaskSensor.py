@@ -1,6 +1,6 @@
 from datetime import datetime
 from airflow import DAG
-from airflow.operators.email import EmailOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import timedelta
 
 default_arguments = {
@@ -17,12 +17,13 @@ dag = DAG(
 	schedule_interval = '05 5 * * *' # thời gian chạy của DAG theo Cron
 )
 
-# EmailOperator
-email_task = EmailOperator(
-	task_id = 'email_example', # name in UI
-	to = 'luutrunghieu298@gmail.com', # send email to
-	subject = 'Email DAG Airflow', # subject of email
-	html_content = 'Something went wrong with the dag', # content of email
-	dag=dag,
-	trigger_rule = 'all_done'
+# create dependencies between tasks in different DAGs
+wait_for_task = ExternalTaskSensor(
+    task_id="wait_for_external_task",
+    external_dag_id="external_dag",  # The DAG to monitor
+    external_task_id="external_task",  # The task to monitor
+    poke_interval=30,  # Check every 30 seconds
+    timeout=600,  # Timeout after 10 minutes
+    mode="poke",  # Use poke mode
 )
+
